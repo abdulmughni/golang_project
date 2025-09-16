@@ -157,7 +157,7 @@ func main() {
 			"https://dev.solutionpilot.ai",
 			"https://checkout.stripe.com",
 			"https://*.stripe.com",
-			"https://golang-project-4qygiagpl-abdul-mughnis-projects-916437c0.vercel.app",
+			"https://golang-project-jet.vercel.app",
 		}
 	case "prod":
 		crs.AllowOrigins = []string{
@@ -178,7 +178,7 @@ func main() {
 			"https://dev.solutionpilot.ai",
 			"https://checkout.stripe.com",
 			"https://*.stripe.com",
-			"https://golang-project-4qygiagpl-abdul-mughnis-projects-916437c0.vercel.app",
+			"https://golang-project-jet.vercel.app/",
 		} // Specify a default set of origins or leave it empty to disallow all
 	}
 
