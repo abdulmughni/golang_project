@@ -157,6 +157,7 @@ func main() {
 			"https://dev.solutionpilot.ai",
 			"https://checkout.stripe.com",
 			"https://*.stripe.com",
+			"https://golang-project-4qygiagpl-abdul-mughnis-projects-916437c0.vercel.app",
 		}
 	case "prod":
 		crs.AllowOrigins = []string{
@@ -170,7 +171,15 @@ func main() {
 			"http://localhost:3000",
 		}
 	default:
-		crs.AllowOrigins = []string{} // Specify a default set of origins or leave it empty to disallow all
+		crs.AllowOrigins = []string{
+			"http://localhost:3001",
+			"http://localhost:3000",
+			"https://devapp.solutionpilot.ai",
+			"https://dev.solutionpilot.ai",
+			"https://checkout.stripe.com",
+			"https://*.stripe.com",
+			"https://golang-project-4qygiagpl-abdul-mughnis-projects-916437c0.vercel.app",
+		} // Specify a default set of origins or leave it empty to disallow all
 	}
 
 	crs.AllowCredentials = true
