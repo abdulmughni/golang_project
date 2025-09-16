@@ -157,9 +157,9 @@ func main() {
 			"https://dev.solutionpilot.ai",
 			"https://checkout.stripe.com",
 			"https://*.stripe.com",
-			"https://golang-project-jet.vercel.app",
+			"https://golang-project-abdul-mughnis-projects-916437c0.vercel.app",
 		}
-	case "prod":
+	case "prod", "production":
 		crs.AllowOrigins = []string{
 			"http://localhost:3001",
 			"http://localhost:3000",
@@ -178,11 +178,13 @@ func main() {
 			"https://dev.solutionpilot.ai",
 			"https://checkout.stripe.com",
 			"https://*.stripe.com",
-			"https://golang-project-jet.vercel.app/",
+			"https://golang-project-abdul-mughnis-projects-916437c0.vercel.app",
 		} // Specify a default set of origins or leave it empty to disallow all
 	}
 
 	crs.AllowCredentials = true
+	// Allow Private Network Access preflight (Chrome) when calling local API from HTTPS sites
+	crs.AllowPrivateNetwork = true
 	crs.AllowHeaders = []string{
 		"Origin",
 		"Content-Type",
@@ -193,6 +195,26 @@ func main() {
 	}
 	crs.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 	crs.ExposeHeaders = []string{"Content-Length"}
+	// Allow Vercel preview and SolutionPilot subdomains dynamically
+	crs.AllowOriginFunc = func(origin string) bool {
+		o := strings.ToLower(strings.TrimSpace(origin))
+		if o == "" {
+			return false
+		}
+		if strings.HasSuffix(o, ".vercel.app") {
+			return true
+		}
+		if strings.HasSuffix(o, ".solutionpilot.ai") {
+			return true
+		}
+		for _, allowed := range crs.AllowOrigins {
+			if o == strings.ToLower(strings.TrimSuffix(allowed, "/")) {
+				return true
+			}
+		}
+		return false
+	}
+
 	router.Use(cors.New(crs))
 
 	// Add middleware to log CORS issues
