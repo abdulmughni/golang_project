@@ -1,0 +1,41 @@
+{
+	"subscription_id": "97b5975b-ae6b-475d-a4f9-fda718f2abd2",
+	"resource_group_name": "2d5e31ca-de27-4be1-bf73-68d7f160cb26",
+	"location": "eastus",
+	"openai_resource_name": "{% faker 'guid' %}",
+	"account": {
+		"kind": "OpenAI",
+		"sku": {
+			"name": "S0"
+		},
+		"tags": {
+			"client_id": "{% faker 'guid' %}",
+			"environment": "production",
+			"project": "openai-deployment"
+		}
+	},
+	"deployment": {
+		"deployment_name": "gpt-4o",
+		"properties": {
+			"name": "GlobalStandard",
+			"current_capacity": 5,
+			"version_upgrade_options": "OnceCurrentVersionExpired",
+			"model": {
+				"format": "OpenAI",
+				"name": "gpt-4o",
+				"version": "2024-05-13"
+			},
+			"sku": {
+				"name": "GlobalStandard",
+				"Capacity": 5
+			}
+		}
+	},
+	"storage_account": {
+		"name": "ds7gi12sdajds",
+		"container_name": "my-container",
+		"sku": "Standard_LRS",
+		"kind": "StorageV2",
+		"access_tier": "Cool"
+	}
+}

@@ -1,0 +1,179 @@
+package aiFunctions
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+
+	"sententiawebapi/handlers/apis/tenantManagement"
+	"sententiawebapi/handlers/models"
+	"sententiawebapi/utilities"
+
+	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
+	openai "github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+)
+
+type DiagramSearchRequest struct {
+	Query string   `json:"query" binding:"required"`
+	Limit int      `json:"limit"`
+	Scope []string `json:"scope"`
+}
+
+type DiagramSearchResult struct {
+	Content  string  `json:"content"`
+	Distance float64 `json:"distance"`
+}
+
+func selectDiagramSearchSource(
+	req *DiagramSearchRequest,
+	vectorStr string,
+	chatCtx *models.ChatContext,
+) (*sql.Rows, error) {
+	var query string
+	var args []any
+
+	if chatCtx.ResourceGroupID == nil {
+		return nil, fmt.Errorf("cannot perform diagram search without knowing project/template id")
+	}
+
+	// Replace "current" with actual document ID, or remove if not applicable
+	scope := make([]string, 0, len(req.Scope))
+	for _, id := range req.Scope {
+		if id == "current" {
+			if chatCtx.ResourceType != nil && *chatCtx.ResourceType == models.ResourceTypeDiagram && chatCtx.ResourceID != nil {
+				scope = append(scope, *chatCtx.ResourceID)
+			}
+		} else {
+			scope = append(scope, id)
+		}
+	}
+
+	switch chatCtx.ResourceGroupType {
+	case models.ResourceGroupTemplate:
+		query = `
+			SELECT COALESCE(diagram_digest, ''), embedding <#> ` + vectorStr + `::vector AS distance
+			FROM st_schema.diagram_templates
+			WHERE tenant_id = $1 AND project_template_id = $2 AND diagram_digest IS NOT NULL
+		`
+		args = append(args, chatCtx.TenantID, chatCtx.ResourceGroupID)
+
+		if len(scope) > 0 {
+			query += ` AND id = ANY($3)`
+			args = append(args, pq.Array(scope))
+		}
+
+	case models.ResourceGroupCommunity:
+		query = `
+			SELECT COALESCE(diagram_digest, ''), embedding <#> ` + vectorStr + `::vector AS distance
+			FROM st_schema.cm_diagram_templates
+			WHERE tenant_id = $1 AND community_project_template_id = $2 AND diagram_digest IS NOT NULL
+		`
+		args = append(args, chatCtx.TenantID, chatCtx.ResourceGroupID)
+
+		if len(scope) > 0 {
+			query += ` AND id = ANY($3)`
+			args = append(args, pq.Array(scope))
+		}
+
+	default: // "project"
+		query = `
+			SELECT COALESCE(diagram_digest, ''), embedding <#> ` + vectorStr + `::vector AS distance
+			FROM st_schema.diagrams
+			WHERE tenant_id = $1 AND project_id = $2 AND diagram_digest IS NOT NULL
+		`
+		args = append(args, chatCtx.TenantID, chatCtx.ResourceGroupID)
+
+		if len(scope) > 0 {
+			query += ` AND id = ANY($3)`
+			args = append(args, pq.Array(scope))
+		}
+	}
+
+	query += fmt.Sprintf(` ORDER BY distance ASC LIMIT $%d`, len(args)+1)
+	args = append(args, req.Limit)
+
+	return tenantManagement.DB.Query(query, args...)
+}
+
+func DiagramSearch(openaiClient *openai.Client, req *DiagramSearchRequest, chatCtx *models.ChatContext) ([]DiagramSearchResult, error) {
+	// 🪵 Pretty log input
+	if payload, err := json.MarshalIndent(req, "", "  "); err == nil {
+		log.Printf("[DiagramSearch] Request:\n%s", payload)
+	} else {
+		log.Printf("[DiagramSearch] Failed to marshal request: %v", err)
+	}
+
+	vectorStr, err := embedQuery(openaiClient, req.Query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embedding for a query message: %v", err)
+	}
+
+	rows, err := selectDiagramSearchSource(req, *vectorStr, chatCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed preparing query: %v", err)
+	}
+	defer rows.Close()
+
+	var results []DiagramSearchResult
+	for rows.Next() {
+		var res DiagramSearchResult
+		if err := rows.Scan(&res.Content, &res.Distance); err != nil {
+			return nil, fmt.Errorf("failed to read db row: %v", err)
+		}
+
+		if res.Content != "" {
+			results = append(results, res)
+		}
+	}
+
+	return results, nil
+}
+
+func DiagramSearchHandler(c *gin.Context) {
+	userID, tenantID, ok := utilities.ProcessIdentity(c)
+	if !ok {
+		return
+	}
+
+	projectID := c.Query("project_id")
+	if projectID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Project ID is required"})
+		return
+	}
+
+	var req DiagramSearchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	openaiConfig, err := utilities.GetOpenAiConfig(tenantManagement.DB, tenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": models.InternalServerError})
+	}
+
+	openaiClient := openai.NewClient(
+		option.WithAPIKey(openaiConfig.OpenAIApiKey),
+	)
+
+	results, err := DiagramSearch(&openaiClient, &req, &models.ChatContext{
+		UserID:   userID,
+		TenantID: tenantID,
+		ResourceIdentifier: models.ResourceIdentifier{
+			ResourceGroupType: models.ResourceGroupProject,
+			ResourceGroupID:   &projectID,
+			ResourceType:      utilities.Ptr(models.ResourceTypeDiagram),
+		},
+	})
+	if err != nil {
+		log.Printf("Semantic search failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": models.InternalServerError})
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
+}
