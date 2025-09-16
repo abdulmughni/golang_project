@@ -169,6 +169,7 @@ func main() {
 			"https://*.stripe.com",
 			"http://localhost:3001",
 			"http://localhost:3000",
+			"https://golang-project-abdul-mughnis-projects-916437c0.vercel.app",
 		}
 	default:
 		crs.AllowOrigins = []string{
@@ -192,6 +193,12 @@ func main() {
 		"Authorization",
 		"Stripe-Version",   // Add these
 		"Stripe-Signature", // Stripe-specific
+		"X-Requested-With",
+		"X-Tenant-Id",
+		"X-Tenant-ID",
+		"Accept-Language",
+		"Cache-Control",
+		"Pragma",
 	}
 	crs.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 	crs.ExposeHeaders = []string{"Content-Length"}
@@ -216,6 +223,11 @@ func main() {
 	}
 
 	router.Use(cors.New(crs))
+
+	// Ensure all preflight requests are short-circuited before hitting auth middlewares
+	router.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
 
 	// Add middleware to log CORS issues
 	router.Use(func(c *gin.Context) {
